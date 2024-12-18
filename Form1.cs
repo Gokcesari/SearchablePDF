@@ -1,4 +1,5 @@
-﻿using System;
+using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
 using System.Drawing;
@@ -22,16 +23,111 @@ namespace SearchablePDF
         {
             InitializeComponent();
         }
+        private List<string> selectedFilePaths = new List<string>(); // Seçilen dosya yollarını saklar
+
         public void Form1_Load(object sender, EventArgs e)
         {
-            
+
         }
 
-        private void btn_Click(object sender, EventArgs e)
+        private void btn1_Click(object sender, EventArgs e)
         {
-            choosedocDir();
-            PopplerProcess.ImagesFromPDF(docDir); ;
+            if (selectedFilePaths == null || !selectedFilePaths.Any())
+            {
+                MessageBox.Show("Lütfen önce dosya veya klasör seçin.");
+                return;
+            }
 
+            foreach (var filePath in selectedFilePaths)
+            {
+                if (!File.Exists(filePath))
+                {
+                    rtbx.AppendText($"Dosya bulunamadı: {filePath}\n");
+                    continue;
+                }
+
+                string extension = Path.GetExtension(filePath).ToLower();
+                string outputFilePath;
+
+                // Eğer zaten .pdf değilse uzantıyı değiştir
+                if (extension != ".pdf")
+                {
+                    outputFilePath = Path.ChangeExtension(filePath, ".pdf");
+                }
+                else
+                {
+                    outputFilePath = filePath; // Zaten PDF ise, olduğu gibi kullan
+                }
+
+                try
+                {
+                    switch (extension)
+                    {
+                        case ".png":
+                            PdfFromPng(filePath, outputFilePath, "tur", rtbx);
+                            break;
+                        case ".jpeg":
+                            PdfFromJpeg(new string[] { filePath }, outputFilePath, "tur", rtbx);
+                            break;
+                        case ".jpg":
+                            PdfFromJpg(filePath, outputFilePath, "tur", rtbx);
+                            break;
+
+                        case ".tiff":
+                        case ".tif":
+                            PdfFromTiff(filePath, outputFilePath, "tur", rtbx);
+                            break;
+
+                        case ".pdf":
+                            PdfDFromPdf(filePath, outputFilePath, "tur", rtbx);
+                            break;
+
+                        default:
+                            rtbx.AppendText($"Desteklenmeyen dosya türü: {extension}\n");
+                            break;
+                    }
+
+                    rtbx.AppendText($"{Path.GetFileName(filePath)} başarıyla {outputFilePath} olarak kaydedildi.\n");
+                }
+                catch (Exception ex)
+                {
+                    rtbx.AppendText($"Hata: {filePath} işlenirken bir hata oluştu: {ex.Message}\n");
+                }
+            }
+
+            MessageBox.Show("Tüm dosyalar başarıyla dönüştürüldü!");
+        }
+        public static void PdfFromPng(string inputName, string outputName, string dil, RichTextBox rtbx)
+        {
+            try
+            {
+                // Tesseract PDF Renderer oluştur
+                using (IResultRenderer renderer = Tesseract.PdfResultRenderer.CreatePdfRenderer(outputName, @"./tessdata", false))
+
+                using (renderer.BeginDocument(outputName)) // PDF dokümanına başla
+
+                using (TesseractEngine engine = new TesseractEngine(@"./tessdata/", dil, EngineMode.LstmOnly))
+                {
+                    // PNG dosyasını yükle
+                    using (var img = Pix.LoadFromFile(inputName))
+                    {
+                        // OCR işlemi gerçekleştir
+                        using (var page = engine.Process(img))
+                        {
+                            // PDF'ye sayfa olarak ekle
+                            renderer.AddPage(page);
+                        }
+                    }
+
+                    // Başarı durumu çıktısı
+                    rtbx.AppendText($"{inputName} başarıyla {outputName} olarak dönüştürüldü.\n");
+                }
+            }
+            catch (Exception ex)
+            {
+                // Hata durumu çıktısı
+                rtbx.AppendText($"Hata: {inputName} işlenirken bir hata oluştu: {ex.Message}\n");
+            }
         }
 
 
@@ -62,7 +158,7 @@ namespace SearchablePDF
 
             PopplerProcess.ImagesFromPDF(inputName);
 
-            if(!Directory.Exists(AppContext.BaseDirectory + "\\temp"))
+            if (!Directory.Exists(AppContext.BaseDirectory + "\\temp"))
             {
                 Directory.CreateDirectory(AppContext.BaseDirectory + "\\temp");
             }
@@ -93,72 +189,114 @@ namespace SearchablePDF
             }
         }
 
-        public void ConvertIt()
+        private void ConvertIt(string filePath)
         {
-            string folderPath = txtbx.Text;
-
-
-            var files = Directory.GetFiles(folderPath);
-
-            if (files.Length == 0)
+            if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
             {
-                MessageBox.Show("Klasörde dosya bulunamadı.");
+                MessageBox.Show("Geçersiz bir dosya yolu girildi.");
                 return;
             }
 
-            foreach (var file in files)
-            {
-                string extension = Path.GetExtension(file).ToLower();  // Get the file extension in lowercase
+            string extension = Path.GetExtension(filePath).ToLower(); // Dosyanın uzantısı
+            string outputFilePath = Path.ChangeExtension(filePath, ".pdf"); // Aynı klasöre PDF olarak kaydedilecek
 
+            try
+            {
                 switch (extension)
                 {
                     case ".png":
                     case ".jpeg":
                     case ".jpg":
-                        PdfFromJpeg(new string[] { file }, file.Replace(Path.GetExtension(file),""), "tur", rtbx);
+                        PdfFromJpeg(new string[] { filePath }, outputFilePath, "tur", rtbx);
                         break;
 
                     case ".tiff":
                     case ".tif":
-                        PdfFromTiff(file, file.Replace(Path.GetExtension(file), ""), "tur", rtbx);
+                        PdfFromTiff(filePath, outputFilePath, "tur", rtbx);
                         break;
 
                     case ".pdf":
-                        PdfDFromPdf(file, file.Replace(Path.GetExtension(file), ""), "tur", rtbx);
+                        PdfDFromPdf(filePath, outputFilePath, "tur", rtbx);
                         break;
 
                     default:
-                        MessageBox.Show("Desteklenmeyen dosya türü: " + extension);
-                        break;
+                        MessageBox.Show($"Desteklenmeyen dosya türü: {extension}");
+                        return;
                 }
 
+                rtbx.AppendText($"{Path.GetFileName(filePath)} başarıyla {outputFilePath} olarak dönüştürüldü.\n");
+            }
+            catch (Exception ex)
+            {
+                rtbx.AppendText($"Hata: {filePath} işlenirken bir hata oluştu: {ex.Message}\n");
             }
         }
-        private void btn1_Click(object sender, EventArgs e)
+
+        private void btn_Click(object sender, EventArgs e)
         {
-            string folderPath = txtbx.Text;
-            var files = Directory.GetFiles(folderPath);
+            DialogResult result = MessageBox.Show(
+                "Dosya seçmek istiyorsanız evete klasör seçmek istiyorsanız hayıra basınız.",
+                "Seçim Yapın",
+                MessageBoxButtons.YesNoCancel,
+                MessageBoxIcon.Question);
 
-            if (files == null)
+            if (result == DialogResult.Yes)
             {
-                MessageBox.Show("Dosya bulunamadı");
+                // Dosya seçimi
+                using (OpenFileDialog openFileDialog = new OpenFileDialog())
+                {
+                    openFileDialog.Multiselect = true;
+                    openFileDialog.Filter = "Supported Files|*.jpg;*.jpeg;*.png;*.tiff;*.tif;*.pdf|All Files|*.*";
 
+                    if (openFileDialog.ShowDialog() == DialogResult.OK)
+                    {
+                        selectedFilePaths.Clear();
+                        txtbx.Clear();
+
+                        foreach (var file in openFileDialog.FileNames)
+                        {
+                            selectedFilePaths.Add(file);
+                            txtbx.AppendText(file + Environment.NewLine); // Dosya yollarını txtbx'e yaz
+                        }
+
+                        rtbx.AppendText($"{selectedFilePaths.Count} dosya seçildi.\n");
+                    }
+                    else
+                    {
+                        MessageBox.Show("Hiçbir dosya seçilmedi.");
+                    }
+                }
             }
+            else if (result == DialogResult.No)
+            {
+                // Klasör seçimi
+                using (FolderBrowserDialog fbd = new FolderBrowserDialog())
+                {
+                    if (fbd.ShowDialog() == DialogResult.OK)
+                    {
+                        selectedFilePaths.Clear();
+                        txtbx.Clear();
 
+                        string[] filesInFolder = Directory.GetFiles(fbd.SelectedPath);
+                        foreach (var file in filesInFolder)
+                        {
+                            selectedFilePaths.Add(file);
+                            txtbx.AppendText(file + Environment.NewLine); // Klasördeki dosyaları txtbx'e yaz
+                        }
+
+                        rtbx.AppendText($"{filesInFolder.Length} dosya bulundu.\n");
+                    }
+                    else
+                    {
+                        MessageBox.Show("Hiçbir klasör seçilmedi.");
+                    }
+                }
+            }
             else
             {
-
-                foreach (var file in files)
-                {
-                    ConvertIt();
-                    rtbx.AppendText(file + " PDF oluşturuldu");
-                }
+                MessageBox.Show("Seçim yapılmadı.");
             }
         }
-
-
-
-
         public void choosedocDir()
         {
             FolderBrowserDialog fbd = new FolderBrowserDialog();
@@ -199,13 +337,59 @@ namespace SearchablePDF
             }
 
         }
+        public void SelectFilesOrDirectory(bool selectFolder)
+        {
+            if (selectFolder)
+            {
+                // Klasör seçimi
+                using (FolderBrowserDialog fbd = new FolderBrowserDialog())
+                {
+                    if (fbd.ShowDialog() == DialogResult.OK)
+                    {
+                        string selectedPath = fbd.SelectedPath;
+                        txtbx.Text = selectedPath;
+
+                        string[] filesInFolder = Directory.GetFiles(selectedPath);
+                        rtbx.AppendText($"\n{filesInFolder.Length} dosya bulundu.\n");
+
+                        foreach (var file in filesInFolder)
+                        {
+                            rtbx.AppendText($"- {Path.GetFileName(file)}\n");
+                            txtbx.AppendText(file + Environment.NewLine);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                // Dosya seçimi
+                using (OpenFileDialog openFileDialog = new OpenFileDialog())
+                {
+                    openFileDialog.Multiselect = true;
+                    openFileDialog.Filter = "Supported Files|*.jpg;*.jpeg;*.png;*.tiff;*.tif;*.pdf|All Files|*.*";
+
+                    if (openFileDialog.ShowDialog() == DialogResult.OK)
+                    {
+                        var selectedFiles = openFileDialog.FileNames;
+                        txtbx.Clear();
+                        rtbx.AppendText($"{selectedFiles.Length} dosya seçildi:\n");
+
+                        foreach (var file in selectedFiles)
+                        {
+                            txtbx.AppendText(file + Environment.NewLine);
+                            rtbx.AppendText($"- {Path.GetFileName(file)}\n");
+                        }
+                    }
+                }
+            }
+        }
+
 
 
         public static void PdfFromTiff(string inputName, string outputName, string dil, RichTextBox rtbx)
         {
             int sayfaSayisi = 0;
             int toplamSayfa = 0;
-
             string extension = "";
 
 
@@ -297,6 +481,26 @@ namespace SearchablePDF
         {
             rtbx.AppendText("Launch: Successful ");
         }
+
+        private void txtbx_TextChanged(object sender, EventArgs e)
+        {
+
+        }
+
+        private void lstbx_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            // Kullanıcı bir öğe seçtiğinde işlem tamamlandı mesajı göster
+            if (lstbx.SelectedItem != null)
+            {
+                MessageBox.Show("İşlem Tamamlandı!");
+            }
+        }
+
+
+
+        private void rtbx_TextChanged(object sender, EventArgs e)
+        {
+
+        }
     }
 }
-
